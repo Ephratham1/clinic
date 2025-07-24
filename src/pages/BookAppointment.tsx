@@ -1,263 +1,174 @@
 "use client"
 
 import type React from "react"
+
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
+import { Calendar } from "@/components/ui/calendar"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { format } from "date-fns"
+import { CalendarIcon, ClockIcon, UserIcon, MailIcon, PhoneIcon, TextIcon } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { useToast } from "@/hooks/use-toast"
+import { Textarea } from "@/components/ui/textarea"
 import { useAppointments } from "../context/AppointmentContext"
-import { Calendar, Clock, User, FileText } from "lucide-react"
+import { toast } from "@/components/ui/sonner"
 
-const BookAppointment = () => {
-  const { toast } = useToast()
-  const { addAppointment } = useAppointments()
-  const [loading, setLoading] = useState(false)
-  const [formData, setFormData] = useState({
-    patientName: "",
-    email: "",
-    phone: "",
-    doctor: "",
-    specialty: "",
-    date: "",
-    time: "",
-    reason: "",
-  })
+export default function BookAppointment() {
+  const { createAppointment } = useAppointments()
+  const [date, setDate] = useState<Date | undefined>(new Date())
+  const [time, setTime] = useState<string>("")
+  const [patientName, setPatientName] = useState<string>("")
+  const [patientEmail, setPatientEmail] = useState<string>("")
+  const [patientPhone, setPatientPhone] = useState<string>("")
+  const [reason, setReason] = useState<string>("")
 
-  const doctors = [
-    { id: "dr-smith", name: "Dr. Sarah Smith", specialty: "General Medicine" },
-    { id: "dr-johnson", name: "Dr. Michael Johnson", specialty: "Cardiology" },
-    { id: "dr-williams", name: "Dr. Emily Williams", specialty: "Dermatology" },
-    { id: "dr-brown", name: "Dr. David Brown", specialty: "Orthopedics" },
-    { id: "dr-davis", name: "Dr. Lisa Davis", specialty: "Pediatrics" },
-  ]
-
-  const timeSlots = [
-    "09:00",
-    "09:30",
-    "10:00",
-    "10:30",
-    "11:00",
-    "11:30",
-    "14:00",
-    "14:30",
-    "15:00",
-    "15:30",
-    "16:00",
-    "16:30",
-  ]
+  const generateTimeSlots = () => {
+    const slots = []
+    for (let i = 9; i <= 17; i++) {
+      // From 9 AM to 5 PM
+      slots.push(`${i.toString().padStart(2, "0")}:00`)
+      if (i < 17) {
+        slots.push(`${i.toString().padStart(2, "0")}:30`)
+      }
+    }
+    return slots
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
 
-    try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-
-      const selectedDoctor = doctors.find((d) => d.id === formData.doctor)
-
-      const appointment = {
-        id: Date.now().toString(),
-        patientName: formData.patientName,
-        email: formData.email,
-        phone: formData.phone,
-        doctor: selectedDoctor?.name || "",
-        specialty: selectedDoctor?.specialty || "",
-        date: formData.date,
-        time: formData.time,
-        reason: formData.reason,
-        status: "scheduled" as const,
-        createdAt: new Date().toISOString(),
-      }
-
-      addAppointment(appointment)
-
-      toast({
-        title: "Appointment Booked Successfully!",
-        description: `Your appointment with ${selectedDoctor?.name} is scheduled for ${formData.date} at ${formData.time}.`,
-      })
-
-      // Reset form
-      setFormData({
-        patientName: "",
-        email: "",
-        phone: "",
-        doctor: "",
-        specialty: "",
-        date: "",
-        time: "",
-        reason: "",
-      })
-    } catch (error) {
-      toast({
-        title: "Booking Failed",
-        description: "There was an error booking your appointment. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setLoading(false)
+    if (!date || !time || !patientName || !reason) {
+      toast.error("Missing Information", { description: "Please fill in all required fields." })
+      return
     }
-  }
 
-  const handleInputChange = (field: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }))
+    const success = await createAppointment({
+      patientName,
+      patientEmail,
+      patientPhone,
+      appointmentDate: date.toISOString(),
+      appointmentTime: time,
+      reason,
+    })
 
-    // Auto-fill specialty when doctor is selected
-    if (field === "doctor") {
-      const selectedDoctor = doctors.find((d) => d.id === value)
-      if (selectedDoctor) {
-        setFormData((prev) => ({ ...prev, specialty: selectedDoctor.specialty }))
-      }
+    if (success) {
+      // Clear form
+      setPatientName("")
+      setPatientEmail("")
+      setPatientPhone("")
+      setDate(new Date())
+      setTime("")
+      setReason("")
     }
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <Card>
+    <div className="container mx-auto p-4 sm:p-6 lg:p-8 min-h-[calc(100vh-80px)] flex items-center justify-center">
+      <Card className="w-full max-w-2xl shadow-lg">
         <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <Calendar className="h-6 w-6" />
-            <span>Book New Appointment</span>
+          <CardTitle className="text-3xl font-bold text-center text-gray-900 dark:text-gray-100">
+            Book New Appointment
           </CardTitle>
-          <CardDescription>
-            Fill out the form below to schedule your appointment with one of our healthcare professionals.
-          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Patient Information */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold flex items-center space-x-2">
-                <User className="h-5 w-5" />
-                <span>Patient Information</span>
-              </h3>
-
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="patientName">Full Name *</Label>
-                  <Input
-                    id="patientName"
-                    value={formData.patientName}
-                    onChange={(e) => handleInputChange("patientName", e.target.value)}
-                    placeholder="Enter your full name"
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Phone Number *</Label>
-                  <Input
-                    id="phone"
-                    type="tel"
-                    value={formData.phone}
-                    onChange={(e) => handleInputChange("phone", e.target.value)}
-                    placeholder="(555) 123-4567"
-                    required
-                  />
-                </div>
-              </div>
-
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Email Address *</Label>
+                <Label htmlFor="patientName" className="flex items-center gap-2">
+                  <UserIcon className="h-4 w-4 text-gray-500 dark:text-gray-400" /> Patient Name{" "}
+                  <span className="text-red-500">*</span>
+                </Label>
                 <Input
-                  id="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => handleInputChange("email", e.target.value)}
-                  placeholder="your.email@example.com"
+                  id="patientName"
+                  placeholder="John Doe"
+                  value={patientName}
+                  onChange={(e) => setPatientName(e.target.value)}
                   required
                 />
               </div>
-            </div>
-
-            {/* Appointment Details */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold flex items-center space-x-2">
-                <Clock className="h-5 w-5" />
-                <span>Appointment Details</span>
-              </h3>
-
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="doctor">Select Doctor *</Label>
-                  <Select value={formData.doctor} onValueChange={(value) => handleInputChange("doctor", value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Choose a doctor" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {doctors.map((doctor) => (
-                        <SelectItem key={doctor.id} value={doctor.id}>
-                          {doctor.name} - {doctor.specialty}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="specialty">Specialty</Label>
-                  <Input
-                    id="specialty"
-                    value={formData.specialty}
-                    readOnly
-                    placeholder="Auto-filled based on doctor"
-                    className="bg-gray-50"
-                  />
-                </div>
-              </div>
-
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="date">Appointment Date *</Label>
-                  <Input
-                    id="date"
-                    type="date"
-                    value={formData.date}
-                    onChange={(e) => handleInputChange("date", e.target.value)}
-                    min={new Date().toISOString().split("T")[0]}
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="time">Preferred Time *</Label>
-                  <Select value={formData.time} onValueChange={(value) => handleInputChange("time", value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select time slot" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {timeSlots.map((time) => (
-                        <SelectItem key={time} value={time}>
-                          {time}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="patientEmail" className="flex items-center gap-2">
+                  <MailIcon className="h-4 w-4 text-gray-500 dark:text-gray-400" /> Patient Email
+                </Label>
+                <Input
+                  id="patientEmail"
+                  type="email"
+                  placeholder="john.doe@example.com"
+                  value={patientEmail}
+                  onChange={(e) => setPatientEmail(e.target.value)}
+                />
               </div>
             </div>
-
-            {/* Reason for Visit */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="patientPhone" className="flex items-center gap-2">
+                  <PhoneIcon className="h-4 w-4 text-gray-500 dark:text-gray-400" /> Patient Phone
+                </Label>
+                <Input
+                  id="patientPhone"
+                  type="tel"
+                  placeholder="123-456-7890"
+                  value={patientPhone}
+                  onChange={(e) => setPatientPhone(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="date" className="flex items-center gap-2">
+                  <CalendarIcon className="h-4 w-4 text-gray-500 dark:text-gray-400" /> Appointment Date{" "}
+                  <span className="text-red-500">*</span>
+                </Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant={"outline"}
+                      className={`w-full justify-start text-left font-normal ${!date && "text-muted-foreground"}`}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {date ? format(date, "PPP") : <span>Pick a date</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <Calendar mode="single" selected={date} onSelect={setDate} initialFocus />
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </div>
             <div className="space-y-2">
-              <Label htmlFor="reason" className="flex items-center space-x-2">
-                <FileText className="h-4 w-4" />
-                <span>Reason for Visit</span>
+              <Label htmlFor="time" className="flex items-center gap-2">
+                <ClockIcon className="h-4 w-4 text-gray-500 dark:text-gray-400" /> Appointment Time{" "}
+                <span className="text-red-500">*</span>
+              </Label>
+              <Select value={time} onValueChange={setTime} required>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select a time" />
+                </SelectTrigger>
+                <SelectContent>
+                  {generateTimeSlots().map((slot) => (
+                    <SelectItem key={slot} value={slot}>
+                      {slot}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="reason" className="flex items-center gap-2">
+                <TextIcon className="h-4 w-4 text-gray-500 dark:text-gray-400" /> Reason for Appointment{" "}
+                <span className="text-red-500">*</span>
               </Label>
               <Textarea
                 id="reason"
-                value={formData.reason}
-                onChange={(e) => handleInputChange("reason", e.target.value)}
-                placeholder="Please describe the reason for your visit (optional)"
-                rows={3}
+                placeholder="Briefly describe the reason for your visit..."
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                required
               />
             </div>
-
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Booking Appointment..." : "Book Appointment"}
+            <Button type="submit" className="w-full">
+              Book Appointment
             </Button>
           </form>
         </CardContent>
@@ -265,5 +176,3 @@ const BookAppointment = () => {
     </div>
   )
 }
-
-export default BookAppointment

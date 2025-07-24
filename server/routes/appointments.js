@@ -3,6 +3,13 @@ const router = express.Router()
 const Appointment = require("../models/Appointment")
 const logger = require("../utils/logger")
 const { body, validationResult, param, query } = require("express-validator")
+const {
+  getAppointments,
+  getAppointment,
+  createAppointment,
+  updateAppointment,
+  deleteAppointment,
+} = require("../controllers/appointments")
 
 // Validation middleware
 const validateAppointment = [
@@ -69,196 +76,23 @@ router.get(
     query("startDate").optional().isISO8601().toDate(),
     query("endDate").optional().isISO8601().toDate(),
   ],
-  async (req, res, next) => {
-    try {
-      const errors = validationResult(req)
-      if (!errors.isEmpty()) {
-        return res.status(400).json({
-          success: false,
-          message: "Validation failed",
-          errors: errors.array(),
-        })
-      }
-
-      const page = Number.parseInt(req.query.page) || 1
-      const limit = Number.parseInt(req.query.limit) || 10
-      const skip = (page - 1) * limit
-
-      // Build filter object
-      const filter = {}
-      if (req.query.status) filter.status = req.query.status
-      if (req.query.department) filter.department = req.query.department
-      if (req.query.startDate || req.query.endDate) {
-        filter.appointmentDate = {}
-        if (req.query.startDate) filter.appointmentDate.$gte = req.query.startDate
-        if (req.query.endDate) filter.appointmentDate.$lte = req.query.endDate
-      }
-
-      const appointments = await Appointment.find(filter)
-        .sort({ appointmentDate: 1, appointmentTime: 1 })
-        .skip(skip)
-        .limit(limit)
-        .exec()
-
-      const total = await Appointment.countDocuments(filter)
-
-      logger.info(`Retrieved ${appointments.length} appointments`, {
-        page,
-        limit,
-        total,
-        filter,
-      })
-
-      res.json({
-        success: true,
-        data: appointments,
-        pagination: {
-          page,
-          limit,
-          total,
-          pages: Math.ceil(total / limit),
-        },
-      })
-    } catch (error) {
-      next(error)
-    }
-  },
+  getAppointments,
 )
 
 // @desc    Get single appointment
 // @route   GET /api/appointments/:id
 // @access  Public
-router.get("/:id", validateId, async (req, res, next) => {
-  try {
-    const errors = validationResult(req)
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        message: "Validation failed",
-        errors: errors.array(),
-      })
-    }
-
-    const appointment = await Appointment.findById(req.params.id)
-
-    if (!appointment) {
-      return res.status(404).json({
-        success: false,
-        message: "Appointment not found",
-      })
-    }
-
-    logger.info(`Retrieved appointment ${req.params.id}`)
-
-    res.json({
-      success: true,
-      data: appointment,
-    })
-  } catch (error) {
-    next(error)
-  }
-})
+router.get("/:id", validateId, getAppointment)
 
 // @desc    Create new appointment
 // @route   POST /api/appointments
 // @access  Public
-router.post("/", validateAppointment, async (req, res, next) => {
-  try {
-    const errors = validationResult(req)
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        message: "Validation failed",
-        errors: errors.array(),
-      })
-    }
-
-    // Check for conflicting appointments
-    const existingAppointment = await Appointment.findOne({
-      doctorName: req.body.doctorName,
-      appointmentDate: req.body.appointmentDate,
-      appointmentTime: req.body.appointmentTime,
-      status: { $ne: "cancelled" },
-    })
-
-    if (existingAppointment) {
-      return res.status(409).json({
-        success: false,
-        message: "This time slot is already booked for the selected doctor",
-      })
-    }
-
-    const appointment = await Appointment.create(req.body)
-
-    logger.info(`Created new appointment ${appointment._id} for ${appointment.patientName}`, {
-      patientName: appointment.patientName,
-      doctorName: appointment.doctorName,
-      appointmentDate: appointment.appointmentDate,
-    })
-
-    res.status(201).json({
-      success: true,
-      data: appointment,
-      message: "Appointment created successfully",
-    })
-  } catch (error) {
-    next(error)
-  }
-})
+router.post("/", validateAppointment, createAppointment)
 
 // @desc    Update appointment
 // @route   PUT /api/appointments/:id
 // @access  Public
-router.put("/:id", [...validateId, ...validateAppointment], async (req, res, next) => {
-  try {
-    const errors = validationResult(req)
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        message: "Validation failed",
-        errors: errors.array(),
-      })
-    }
-
-    // Check for conflicting appointments (excluding current appointment)
-    const conflictingAppointment = await Appointment.findOne({
-      _id: { $ne: req.params.id },
-      doctorName: req.body.doctorName,
-      appointmentDate: req.body.appointmentDate,
-      appointmentTime: req.body.appointmentTime,
-      status: { $in: ["scheduled", "confirmed"] },
-    })
-
-    if (conflictingAppointment) {
-      return res.status(409).json({
-        success: false,
-        message: "This time slot is already booked for the selected doctor",
-      })
-    }
-
-    const appointment = await Appointment.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-      runValidators: true,
-    })
-
-    if (!appointment) {
-      return res.status(404).json({
-        success: false,
-        message: "Appointment not found",
-      })
-    }
-
-    logger.info(`Updated appointment ${req.params.id}`)
-
-    res.json({
-      success: true,
-      data: appointment,
-      message: "Appointment updated successfully",
-    })
-  } catch (error) {
-    next(error)
-  }
-})
+router.put("/:id", [...validateId, ...validateAppointment], updateAppointment)
 
 // @desc    Update appointment status
 // @route   PATCH /api/appointments/:id/status
@@ -291,18 +125,19 @@ router.patch(
       if (!appointment) {
         return res.status(404).json({
           success: false,
-          message: "Appointment not found",
+          message: `Appointment not found with id of ${req.params.id}`,
         })
       }
 
       logger.info(`Updated appointment ${req.params.id} status to ${req.body.status}`)
 
-      res.json({
+      res.status(200).json({
         success: true,
         data: appointment,
         message: "Appointment status updated successfully",
       })
     } catch (error) {
+      logger.error(`Error updating appointment ${req.params.id} status:`, error)
       next(error)
     }
   },
@@ -311,36 +146,7 @@ router.patch(
 // @desc    Delete appointment
 // @route   DELETE /api/appointments/:id
 // @access  Public
-router.delete("/:id", validateId, async (req, res, next) => {
-  try {
-    const errors = validationResult(req)
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        message: "Validation failed",
-        errors: errors.array(),
-      })
-    }
-
-    const appointment = await Appointment.findByIdAndDelete(req.params.id)
-
-    if (!appointment) {
-      return res.status(404).json({
-        success: false,
-        message: "Appointment not found",
-      })
-    }
-
-    logger.info(`Deleted appointment ${req.params.id}`)
-
-    res.json({
-      success: true,
-      message: "Appointment deleted successfully",
-    })
-  } catch (error) {
-    next(error)
-  }
-})
+router.delete("/:id", validateId, deleteAppointment)
 
 // @desc    Get appointment statistics
 // @route   GET /api/appointments/stats/overview
@@ -385,6 +191,7 @@ router.get("/stats/overview", async (req, res, next) => {
 
     logger.info("Retrieved appointment statistics")
   } catch (error) {
+    logger.error("Error retrieving appointment statistics:", error)
     next(error)
   }
 })

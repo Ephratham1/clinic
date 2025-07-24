@@ -1,63 +1,49 @@
-const winston = require("winston")
+const { createLogger, format, transports } = require("winston")
 const path = require("path")
 const fs = require("fs")
 
-// Create logs directory if it doesn't exist
-const logsDir = path.join(__dirname, "../logs")
-try {
-  if (!fs.existsSync(logsDir)) {
-    fs.mkdirSync(logsDir, { recursive: true })
+const logDir = process.env.LOG_DIR || path.join(__dirname, "..", "logs")
+
+// Ensure the log directory exists
+if (!fs.existsSync(logDir)) {
+  try {
+    fs.mkdirSync(logDir, { recursive: true })
+  } catch (err) {
+    console.error(`Failed to create log directory ${logDir}:`, err)
+    // Fallback to console transport if directory creation fails
+    module.exports = createLogger({
+      level: process.env.LOG_LEVEL || "info",
+      format: format.combine(
+        format.colorize(),
+        format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
+        format.printf((info) => `${info.timestamp} ${info.level}: ${info.message}`),
+      ),
+      transports: [new transports.Console()],
+    })
+    // Exit early if directory creation failed
   }
-} catch (error) {
-  console.warn("Could not create logs directory:", error.message)
 }
 
-// Define log format
-const logFormat = winston.format.combine(
-  winston.format.timestamp({
-    format: "YYYY-MM-DD HH:mm:ss",
-  }),
-  winston.format.errors({ stack: true }),
-  winston.format.json(),
-)
-
-// Create logger instance
-const logger = winston.createLogger({
+const logger = createLogger({
   level: process.env.LOG_LEVEL || "info",
-  format: logFormat,
-  defaultMeta: { service: "clinic-appointment-api" },
-  transports: [],
+  format: format.combine(
+    format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
+    format.errors({ stack: true }),
+    format.splat(),
+    format.json(),
+  ),
+  transports: [
+    new transports.Console({
+      format: format.combine(
+        format.colorize(),
+        format.printf((info) => `${info.timestamp} ${info.level}: ${info.message}`),
+      ),
+    }),
+    new transports.File({ filename: path.join(logDir, "error.log"), level: "error" }),
+    new transports.File({ filename: path.join(logDir, "combined.log") }),
+  ],
+  exceptionHandlers: [new transports.File({ filename: path.join(logDir, "exceptions.log") })],
+  rejectionHandlers: [new transports.File({ filename: path.join(logDir, "rejections.log") })],
 })
-
-// Add file transports only if logs directory exists
-try {
-  if (fs.existsSync(logsDir)) {
-    logger.add(
-      new winston.transports.File({
-        filename: path.join(logsDir, "error.log"),
-        level: "error",
-        maxsize: 5242880, // 5MB
-        maxFiles: 5,
-      }),
-    )
-
-    logger.add(
-      new winston.transports.File({
-        filename: path.join(logsDir, "combined.log"),
-        maxsize: 5242880, // 5MB
-        maxFiles: 5,
-      }),
-    )
-  }
-} catch (error) {
-  console.warn("Could not add file transports:", error.message)
-}
-
-// Always add console transport
-logger.add(
-  new winston.transports.Console({
-    format: winston.format.combine(winston.format.colorize(), winston.format.simple()),
-  }),
-)
 
 module.exports = logger

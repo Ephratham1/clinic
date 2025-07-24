@@ -12,8 +12,13 @@ services:
       - PORT=5000
       - MONGODB_URI=${MONGODB_URI}
       - LOG_LEVEL=${LOG_LEVEL:-info}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+      - JWT_SECRET=${JWT_SECRET}
+      - BCRYPT_ROUNDS=${BCRYPT_ROUNDS}
+      - RATE_LIMIT_WINDOW_MS=${RATE_LIMIT_WINDOW_MS}
+      - RATE_LIMIT_MAX_REQUESTS=${RATE_LIMIT_MAX_REQUESTS}
     volumes:
-      - logs:/app/logs
+      - logs:/app/logs # Mount a named volume for logs
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "node", "healthcheck.js"]
@@ -29,12 +34,12 @@ services:
       context: .
       dockerfile: Dockerfile.frontend
     ports:
-      - "3000:80"
+      - "3000:80" # Map container port 80 to host port 3000
     environment:
-      - NEXT_PUBLIC_API_URL=http://backend:5000
+      - NEXT_PUBLIC_API_URL=http://backend:5000 # Connects to the backend service within the Docker network
     depends_on:
       backend:
-        condition: service_healthy
+        condition: service_healthy # Ensure backend is healthy before starting frontend
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/"]
@@ -45,14 +50,15 @@ services:
     networks:
       - clinic-network
 
+  # Optional Nginx reverse proxy for production deployment (if not using Vercel/Netlify for frontend)
   nginx:
     image: nginx:alpine
     ports:
-      - "80:80"
-      - "443:443"
+      - "80:80" # Map host port 80 to Nginx container port 80
+      - "443:443" # Map host port 443 to Nginx container port 443 (for HTTPS)
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro # Main Nginx config
+      - ./nginx/ssl:/etc/nginx/ssl:ro # For SSL certificates (if using HTTPS)
     depends_on:
       - backend
       - frontend
@@ -62,8 +68,8 @@ services:
 
 networks:
   clinic-network:
-    driver: bridge
+    driver: bridge # Define a custom bridge network
 
 volumes:
   logs:
-    driver: local
+    driver: local # Define the named volume for logs

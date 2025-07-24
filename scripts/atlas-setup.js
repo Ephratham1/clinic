@@ -1,73 +1,80 @@
 const mongoose = require("mongoose")
-require("dotenv").config()
+const Appointment = require("../server/models/Appointment") // Adjust path as needed
+require("dotenv").config({ path: "./server/.env" }) // Load environment variables
 
 const setupAtlas = async () => {
   try {
-    console.log("🔧 Setting up MongoDB Atlas...")
-
     const mongoURI = process.env.MONGODB_URI
+
     if (!mongoURI) {
-      throw new Error("MONGODB_URI environment variable is not defined")
+      console.error(
+        "MONGODB_URI environment variable is not defined. Please set it in server/.env or your environment.",
+      )
+      process.exit(1)
     }
 
-    // Connect to MongoDB Atlas
+    console.log("Connecting to MongoDB Atlas for setup...")
     await mongoose.connect(mongoURI, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
+      retryWrites: true,
+      w: "majority",
     })
+    console.log("Connected to MongoDB Atlas.")
 
-    console.log("✅ Connected to MongoDB Atlas")
+    // 1. Create Indexes
+    console.log("Creating indexes...")
+    await Appointment.collection.createIndex({ appointmentDate: 1, appointmentTime: 1 }, { unique: true })
+    await Appointment.collection.createIndex({ patientEmail: 1 })
+    await Appointment.collection.createIndex({ status: 1 })
+    console.log("Indexes created successfully.")
 
-    // Create indexes for better performance
-    const Appointment = require("../server/models/Appointment")
-
-    console.log("📊 Creating database indexes...")
-    await Appointment.createIndexes()
-    console.log("✅ Database indexes created")
-
-    // Create sample data (optional)
-    const appointmentCount = await Appointment.countDocuments()
-    if (appointmentCount === 0) {
-      console.log("📝 Creating sample appointments...")
-
+    // 2. Seed Sample Data (Optional)
+    console.log("Seeding sample data (if collection is empty)...")
+    const count = await Appointment.countDocuments()
+    if (count === 0) {
       const sampleAppointments = [
         {
-          patientName: "John Doe",
-          patientEmail: "john.doe@example.com",
-          patientPhone: "+1234567890",
-          appointmentDate: new Date(Date.now() + 24 * 60 * 60 * 1000), // Tomorrow
+          patientName: "Alice Smith",
+          patientEmail: "alice.smith@example.com",
+          patientPhone: "123-456-7890",
+          appointmentDate: new Date("2025-08-01T10:00:00Z"),
           appointmentTime: "10:00",
-          doctorName: "Dr. Smith",
-          department: "General Medicine",
-          reason: "Regular checkup",
+          reason: "Routine check-up",
           status: "scheduled",
         },
         {
-          patientName: "Jane Smith",
-          patientEmail: "jane.smith@example.com",
-          patientPhone: "+1234567891",
-          appointmentDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000), // Day after tomorrow
+          patientName: "Bob Johnson",
+          patientEmail: "bob.j@example.com",
+          patientPhone: "098-765-4321",
+          appointmentDate: new Date("2025-08-01T14:30:00Z"),
           appointmentTime: "14:30",
-          doctorName: "Dr. Johnson",
-          department: "Cardiology",
-          reason: "Heart consultation",
-          status: "confirmed",
+          reason: "Dental cleaning",
+          status: "scheduled",
+        },
+        {
+          patientName: "Charlie Brown",
+          patientEmail: "charlie.b@example.com",
+          patientPhone: "555-123-4567",
+          appointmentDate: new Date("2025-07-20T09:00:00Z"),
+          appointmentTime: "09:00",
+          reason: "Follow-up",
+          status: "completed",
         },
       ]
-
       await Appointment.insertMany(sampleAppointments)
-      console.log("✅ Sample appointments created")
+      console.log(`${sampleAppointments.length} sample appointments added.`)
     } else {
-      console.log(`✅ Database already contains ${appointmentCount} appointments`)
+      console.log("Appointments collection is not empty, skipping seeding.")
     }
 
-    console.log("🎉 MongoDB Atlas setup complete!")
+    console.log("MongoDB Atlas setup complete!")
   } catch (error) {
-    console.error("❌ Atlas setup failed:", error.message)
+    console.error("Error during MongoDB Atlas setup:", error)
     process.exit(1)
   } finally {
-    await mongoose.connection.close()
-    console.log("🔌 Database connection closed")
+    await mongoose.disconnect()
+    console.log("Disconnected from MongoDB Atlas.")
   }
 }
 

@@ -1,46 +1,37 @@
-# Multi-stage build for backend
+# Stage 1: Build the backend application
 FROM node:18-alpine AS backend-builder
 
-# Set working directory
-WORKDIR /app/server
+WORKDIR /app
 
-# Copy package files
+# Copy package.json and package-lock.json
 COPY server/package*.json ./
 
 # Install dependencies
-RUN npm install --production && npm cache clean --force
+RUN npm install --production
 
-# Copy source code
-COPY server/ ./
+# Copy the rest of the backend source code
+COPY server/ .
 
-# Production stage
-FROM node:18-alpine AS production
+# Stage 2: Run the backend application
+FROM node:18-alpine AS backend-runner
 
-# Install dumb-init for proper signal handling
-RUN apk add --no-cache dumb-init curl
-
-# Create app user and logs directory
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001 && \
-    mkdir -p /app/logs && \
-    chown -R nodejs:nodejs /app
-
-# Set working directory
 WORKDIR /app
 
-# Copy built application
-COPY --from=backend-builder --chown=nodejs:nodejs /app/server ./
+# Create a non-root user and group
+RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
 
-# Switch to non-root user
-USER nodejs
+# Create logs directory and set permissions
+RUN mkdir -p /app/logs && chown appuser:appgroup /app/logs
 
-# Expose port
+# Copy production dependencies and built application from builder stage
+COPY --from=backend-builder /app/node_modules ./node_modules
+COPY --from=backend-builder /app/ .
+
+# Set the user to run the application
+USER appuser
+
+# Expose the port the app runs on
 EXPOSE 5000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node healthcheck.js
-
-# Start application
-ENTRYPOINT ["dumb-init", "--"]
-CMD ["node", "app.js"]
+# Command to run the application
+CMD ["node", "server.js"]

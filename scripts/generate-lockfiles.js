@@ -1,37 +1,38 @@
 const { execSync } = require("child_process")
-const fs = require("fs")
 const path = require("path")
+const fs = require("fs")
 
-console.log("🔧 Generating package-lock.json files...")
+const projects = [
+  { name: "frontend", path: "." },
+  { name: "backend", path: "server" },
+]
 
-// Generate lock file for frontend
-console.log("📦 Generating frontend package-lock.json...")
-try {
-  if (!fs.existsSync("package-lock.json")) {
+console.log("Generating package-lock.json files...")
+
+projects.forEach((project) => {
+  const projectPath = path.resolve(__dirname, "..", project.path)
+  const packageJsonPath = path.join(projectPath, "package.json")
+
+  if (!fs.existsSync(packageJsonPath)) {
+    console.warn(`Skipping ${project.name}: package.json not found at ${packageJsonPath}`)
+    return
+  }
+
+  console.log(`\nProcessing ${project.name} at ${projectPath}...`)
+  try {
+    // Change directory to the project path
+    process.chdir(projectPath)
+
+    // Run npm install --package-lock-only
+    console.log(`Running 'npm install --package-lock-only' for ${project.name}...`)
     execSync("npm install --package-lock-only", { stdio: "inherit" })
-    console.log("✅ Frontend package-lock.json generated")
-  } else {
-    console.log("✅ Frontend package-lock.json already exists")
+    console.log(`Successfully generated package-lock.json for ${project.name}.`)
+  } catch (error) {
+    console.error(`Error generating package-lock.json for ${project.name}:`, error.message)
+  } finally {
+    // Change back to the original directory to avoid issues with subsequent projects
+    process.chdir(path.resolve(__dirname, ".."))
   }
-} catch (error) {
-  console.error("❌ Failed to generate frontend package-lock.json:", error.message)
-}
+})
 
-// Generate lock file for backend
-console.log("📦 Generating backend package-lock.json...")
-try {
-  const serverDir = path.join(__dirname, "..", "server")
-  if (!fs.existsSync(path.join(serverDir, "package-lock.json"))) {
-    execSync("npm install --package-lock-only", {
-      cwd: serverDir,
-      stdio: "inherit",
-    })
-    console.log("✅ Backend package-lock.json generated")
-  } else {
-    console.log("✅ Backend package-lock.json already exists")
-  }
-} catch (error) {
-  console.error("❌ Failed to generate backend package-lock.json:", error.message)
-}
-
-console.log("🎉 Lock file generation complete!")
+console.log("\nFinished generating package-lock.json files.")
