@@ -1,11 +1,15 @@
 const winston = require("winston")
 const path = require("path")
+const fs = require("fs")
 
 // Create logs directory if it doesn't exist
-const fs = require("fs")
 const logsDir = path.join(__dirname, "../logs")
-if (!fs.existsSync(logsDir)) {
-  fs.mkdirSync(logsDir, { recursive: true })
+try {
+  if (!fs.existsSync(logsDir)) {
+    fs.mkdirSync(logsDir, { recursive: true })
+  }
+} catch (error) {
+  console.warn("Could not create logs directory:", error.message)
 }
 
 // Define log format
@@ -22,30 +26,38 @@ const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || "info",
   format: logFormat,
   defaultMeta: { service: "clinic-appointment-api" },
-  transports: [
-    // Write all logs with level 'error' and below to error.log
-    new winston.transports.File({
-      filename: path.join(logsDir, "error.log"),
-      level: "error",
-      maxsize: 5242880, // 5MB
-      maxFiles: 5,
-    }),
-    // Write all logs with level 'info' and below to combined.log
-    new winston.transports.File({
-      filename: path.join(logsDir, "combined.log"),
-      maxsize: 5242880, // 5MB
-      maxFiles: 5,
-    }),
-  ],
+  transports: [],
 })
 
-// If we're not in production, log to the console as well
-if (process.env.NODE_ENV !== "production") {
-  logger.add(
-    new winston.transports.Console({
-      format: winston.format.combine(winston.format.colorize(), winston.format.simple()),
-    }),
-  )
+// Add file transports only if logs directory exists
+try {
+  if (fs.existsSync(logsDir)) {
+    logger.add(
+      new winston.transports.File({
+        filename: path.join(logsDir, "error.log"),
+        level: "error",
+        maxsize: 5242880, // 5MB
+        maxFiles: 5,
+      }),
+    )
+
+    logger.add(
+      new winston.transports.File({
+        filename: path.join(logsDir, "combined.log"),
+        maxsize: 5242880, // 5MB
+        maxFiles: 5,
+      }),
+    )
+  }
+} catch (error) {
+  console.warn("Could not add file transports:", error.message)
 }
+
+// Always add console transport
+logger.add(
+  new winston.transports.Console({
+    format: winston.format.combine(winston.format.colorize(), winston.format.simple()),
+  }),
+)
 
 module.exports = logger

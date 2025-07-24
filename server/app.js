@@ -4,6 +4,7 @@ const helmet = require("helmet")
 const morgan = require("morgan")
 const compression = require("compression")
 const rateLimit = require("express-rate-limit")
+const path = require("path")
 require("dotenv").config()
 
 const connectDB = require("./config/database")
@@ -39,8 +40,8 @@ app.use(
 
 // Rate limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  windowMs: Number.parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
+  max: Number.parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
   message: {
     error: "Too many requests from this IP, please try again later.",
   },
@@ -87,6 +88,7 @@ app.get("/", (req, res) => {
     version: "1.0.0",
     status: "running",
     timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || "development",
   })
 })
 
@@ -102,15 +104,13 @@ app.use("*", (req, res) => {
 app.use(errorHandler)
 
 // Graceful shutdown
-process.on("SIGTERM", () => {
-  logger.info("SIGTERM received, shutting down gracefully")
+const gracefulShutdown = (signal) => {
+  logger.info(`${signal} received, shutting down gracefully`)
   process.exit(0)
-})
+}
 
-process.on("SIGINT", () => {
-  logger.info("SIGINT received, shutting down gracefully")
-  process.exit(0)
-})
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"))
+process.on("SIGINT", () => gracefulShutdown("SIGINT"))
 
 // Start server
 app.listen(PORT, () => {

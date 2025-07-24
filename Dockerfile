@@ -8,7 +8,7 @@ WORKDIR /app/server
 COPY server/package*.json ./
 
 # Install dependencies
-RUN npm install --only=production && npm cache clean --force
+RUN npm install --production && npm cache clean --force
 
 # Copy source code
 COPY server/ ./
@@ -17,11 +17,13 @@ COPY server/ ./
 FROM node:18-alpine AS production
 
 # Install dumb-init for proper signal handling
-RUN apk add --no-cache dumb-init
+RUN apk add --no-cache dumb-init curl
 
-# Create app user
+# Create app user and logs directory
 RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001
+    adduser -S nodejs -u 1001 && \
+    mkdir -p /app/logs && \
+    chown -R nodejs:nodejs /app
 
 # Set working directory
 WORKDIR /app

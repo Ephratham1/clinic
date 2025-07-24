@@ -8,51 +8,73 @@ const appointmentSchema = new mongoose.Schema(
       trim: true,
       maxlength: [100, "Patient name cannot exceed 100 characters"],
     },
-    email: {
+    patientEmail: {
       type: String,
-      required: [true, "Email is required"],
+      required: [true, "Patient email is required"],
       trim: true,
       lowercase: true,
       match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, "Please enter a valid email"],
     },
-    phone: {
+    patientPhone: {
       type: String,
-      required: [true, "Phone number is required"],
+      required: [true, "Patient phone is required"],
       trim: true,
       match: [/^[+]?[1-9][\d]{0,15}$/, "Please enter a valid phone number"],
     },
-    doctor: {
-      type: String,
-      required: [true, "Doctor is required"],
-      trim: true,
-    },
-    specialty: {
-      type: String,
-      required: [true, "Specialty is required"],
-      trim: true,
-    },
-    date: {
+    appointmentDate: {
       type: Date,
       required: [true, "Appointment date is required"],
       validate: {
-        validator: (value) => value >= new Date().setHours(0, 0, 0, 0),
-        message: "Appointment date cannot be in the past",
+        validator: (date) => date > new Date(),
+        message: "Appointment date must be in the future",
       },
     },
-    time: {
+    appointmentTime: {
       type: String,
       required: [true, "Appointment time is required"],
-      match: [/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "Please enter a valid time format (HH:MM)"],
+      match: [/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "Please enter a valid time in HH:MM format"],
+    },
+    doctorName: {
+      type: String,
+      required: [true, "Doctor name is required"],
+      trim: true,
+      maxlength: [100, "Doctor name cannot exceed 100 characters"],
+    },
+    department: {
+      type: String,
+      required: [true, "Department is required"],
+      enum: {
+        values: [
+          "General Medicine",
+          "Cardiology",
+          "Dermatology",
+          "Orthopedics",
+          "Pediatrics",
+          "Gynecology",
+          "Neurology",
+          "Psychiatry",
+        ],
+        message: "Please select a valid department",
+      },
     },
     reason: {
       type: String,
+      required: [true, "Reason for appointment is required"],
       trim: true,
       maxlength: [500, "Reason cannot exceed 500 characters"],
     },
     status: {
       type: String,
-      enum: ["scheduled", "completed", "cancelled", "no-show"],
+      enum: {
+        values: ["scheduled", "confirmed", "completed", "cancelled", "no-show"],
+        message: "Please select a valid status",
+      },
       default: "scheduled",
+    },
+    notes: {
+      type: String,
+      trim: true,
+      maxlength: [1000, "Notes cannot exceed 1000 characters"],
     },
     createdAt: {
       type: Date,
@@ -71,19 +93,18 @@ const appointmentSchema = new mongoose.Schema(
 )
 
 // Indexes for better query performance
-appointmentSchema.index({ date: 1, time: 1 })
-appointmentSchema.index({ email: 1 })
+appointmentSchema.index({ appointmentDate: 1, appointmentTime: 1 })
+appointmentSchema.index({ patientEmail: 1 })
+appointmentSchema.index({ doctorName: 1 })
 appointmentSchema.index({ status: 1 })
-appointmentSchema.index({ doctor: 1 })
+appointmentSchema.index({ createdAt: -1 })
 
-// Virtual for formatted date
-appointmentSchema.virtual("formattedDate").get(function () {
-  return this.date.toLocaleDateString("en-US", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  })
+// Virtual for full appointment datetime
+appointmentSchema.virtual("fullDateTime").get(function () {
+  const date = new Date(this.appointmentDate)
+  const [hours, minutes] = this.appointmentTime.split(":")
+  date.setHours(Number.parseInt(hours), Number.parseInt(minutes))
+  return date
 })
 
 // Pre-save middleware to update updatedAt
@@ -95,17 +116,18 @@ appointmentSchema.pre("save", function (next) {
 // Static method to find appointments by date range
 appointmentSchema.statics.findByDateRange = function (startDate, endDate) {
   return this.find({
-    date: {
+    appointmentDate: {
       $gte: startDate,
       $lte: endDate,
     },
-  }).sort({ date: 1, time: 1 })
+  }).sort({ appointmentDate: 1, appointmentTime: 1 })
 }
 
 // Instance method to check if appointment is upcoming
 appointmentSchema.methods.isUpcoming = function () {
-  const appointmentDateTime = new Date(`${this.date.toDateString()} ${this.time}`)
-  return appointmentDateTime > new Date() && this.status === "scheduled"
+  const now = new Date()
+  const appointmentDateTime = this.fullDateTime
+  return appointmentDateTime > now && this.status === "scheduled"
 }
 
 module.exports = mongoose.model("Appointment", appointmentSchema)

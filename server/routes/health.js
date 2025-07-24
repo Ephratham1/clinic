@@ -1,45 +1,43 @@
 const express = require("express")
 const mongoose = require("mongoose")
+const logger = require("../utils/logger")
+
 const router = express.Router()
 
-// Health check endpoint
+// Basic health check
 router.get("/", async (req, res) => {
   try {
-    // Check database connection
-    const dbStatus = mongoose.connection.readyState === 1 ? "connected" : "disconnected"
-
-    // Get system info
-    const healthCheck = {
+    const health = {
       status: "OK",
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
-      database: {
-        status: dbStatus,
-        name: mongoose.connection.name || "unknown",
-      },
-      memory: {
-        used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + " MB",
-        total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024) + " MB",
-      },
       environment: process.env.NODE_ENV || "development",
       version: "1.0.0",
+      services: {
+        database: "checking...",
+        memory: {
+          used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + " MB",
+          total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024) + " MB",
+        },
+      },
     }
 
-    // If database is not connected, return 503
-    if (dbStatus !== "connected") {
-      return res.status(503).json({
-        ...healthCheck,
-        status: "ERROR",
-        message: "Database connection failed",
-      })
+    // Check database connection
+    if (mongoose.connection.readyState === 1) {
+      health.services.database = "connected"
+    } else {
+      health.services.database = "disconnected"
+      health.status = "WARNING"
     }
 
-    res.status(200).json(healthCheck)
+    const statusCode = health.status === "OK" ? 200 : 503
+    res.status(statusCode).json(health)
   } catch (error) {
+    logger.error("Health check failed:", error)
     res.status(503).json({
       status: "ERROR",
       timestamp: new Date().toISOString(),
-      message: error.message,
+      error: error.message,
     })
   }
 })
@@ -50,30 +48,35 @@ router.get("/detailed", async (req, res) => {
     const detailed = {
       status: "OK",
       timestamp: new Date().toISOString(),
-      services: {
-        database: {
-          status: mongoose.connection.readyState === 1 ? "healthy" : "unhealthy",
-          responseTime: Date.now(),
-        },
-        api: {
-          status: "healthy",
-          uptime: process.uptime(),
-        },
-      },
+      uptime: process.uptime(),
+      environment: process.env.NODE_ENV || "development",
+      version: "1.0.0",
       system: {
         platform: process.platform,
+        arch: process.arch,
         nodeVersion: process.version,
-        memory: process.memoryUsage(),
-        cpu: process.cpuUsage(),
+        pid: process.pid,
+      },
+      memory: {
+        used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + " MB",
+        total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024) + " MB",
+        external: Math.round(process.memoryUsage().external / 1024 / 1024) + " MB",
+      },
+      database: {
+        status: mongoose.connection.readyState === 1 ? "connected" : "disconnected",
+        host: mongoose.connection.host || "unknown",
+        name: mongoose.connection.name || "unknown",
       },
     }
 
-    res.status(200).json(detailed)
+    const statusCode = detailed.database.status === "connected" ? 200 : 503
+    res.status(statusCode).json(detailed)
   } catch (error) {
+    logger.error("Detailed health check failed:", error)
     res.status(503).json({
       status: "ERROR",
       timestamp: new Date().toISOString(),
-      message: error.message,
+      error: error.message,
     })
   }
 })
