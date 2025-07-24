@@ -23,21 +23,9 @@ services:
       - "5000:5000"
     environment:
       - NODE_ENV=development
-      - MONGODB_URI=mongodb://mongodb:27017/clinic-dev
+      - MONGODB_URI=mongodb+srv://ephratham:ephratham@cluster0.x3irutl.mongodb.net/clinic-dev?retryWrites=true&w=majority&appName=Cluster0
       - FRONTEND_URL=http://localhost:3000
-    depends_on:
-      - mongodb
     volumes:
       - ./server:/app
       - /app/node_modules
     command: npm run dev
-
-  mongodb:
-    image: mongo:6.0
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongodb_dev_data:/data/db
-
-volumes:
-  mongodb_dev_data:

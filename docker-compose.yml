@@ -26,33 +26,13 @@ services:
       - "5000:5000"
     environment:
       - NODE_ENV=production
-      - MONGODB_URI=mongodb://mongodb:27017/clinic
+      - MONGODB_URI=mongodb+srv://ephratham:ephratham@cluster0.x3irutl.mongodb.net/clinic?retryWrites=true&w=majority&appName=Cluster0
       - FRONTEND_URL=http://localhost:3000
-    depends_on:
-      - mongodb
     restart: unless-stopped
     volumes:
       - ./server/logs:/app/server/logs
     healthcheck:
       test: ["CMD", "node", "server/healthcheck.js"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  mongodb:
-    image: mongo:6.0
-    ports:
-      - "27017:27017"
-    environment:
-      - MONGO_INITDB_ROOT_USERNAME=admin
-      - MONGO_INITDB_ROOT_PASSWORD=password
-      - MONGO_INITDB_DATABASE=clinic
-    volumes:
-      - mongodb_data:/data/db
-      - ./scripts/init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -69,6 +49,3 @@ services:
       - frontend
       - backend
     restart: unless-stopped
-
-volumes:
-  mongodb_data:
