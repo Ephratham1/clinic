@@ -1,16 +1,16 @@
 {
   "name": "clinic-appointment-backend",
   "version": "1.0.0",
-  "description": "Backend API for clinic appointment system",
+  "description": "Clinic Appointment System Backend",
   "main": "app.js",
   "scripts": {
     "start": "node app.js",
     "dev": "nodemon app.js",
-    "test": "jest",
+    "test": "jest --coverage",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage",
-    "lint": "eslint .",
-    "lint:fix": "eslint . --fix"
+    "lint": "eslint . --ext .js",
+    "lint:fix": "eslint . --ext .js --fix",
+    "seed": "node scripts/seed.js"
   },
   "dependencies": {
     "express": "^4.18.2",
@@ -19,12 +19,10 @@
     "helmet": "^7.1.0",
     "morgan": "^1.10.0",
     "express-rate-limit": "^7.1.5",
-    "compression": "^1.7.4",
     "express-validator": "^7.0.1",
-    "dotenv": "^16.3.1",
+    "compression": "^1.7.4",
     "winston": "^3.11.0",
-    "bcryptjs": "^2.4.3",
-    "jsonwebtoken": "^9.0.2"
+    "dotenv": "^16.3.1"
   },
   "devDependencies": {
     "nodemon": "^3.0.2",
@@ -35,5 +33,8 @@
   },
   "engines": {
     "node": ">=18.0.0"
-  }
+  },
+  "keywords": ["clinic", "appointment", "healthcare", "booking"],
+  "author": "Your Name",
+  "license": "MIT"
 }

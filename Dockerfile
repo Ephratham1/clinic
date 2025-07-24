@@ -1,22 +1,17 @@
-# Multi-stage build for production optimization
-FROM node:18-alpine AS builder
+# Multi-stage build for backend
+FROM node:18-alpine AS backend-builder
 
 # Set working directory
-WORKDIR /app
+WORKDIR /app/server
 
 # Copy package files
-COPY package*.json ./
-COPY server/package*.json ./server/
+COPY server/package*.json ./
 
 # Install dependencies
 RUN npm ci --only=production && npm cache clean --force
-RUN cd server && npm ci --only=production && npm cache clean --force
 
 # Copy source code
-COPY . .
-
-# Build the frontend
-RUN npm run build
+COPY server/ ./
 
 # Production stage
 FROM node:18-alpine AS production
@@ -25,30 +20,25 @@ FROM node:18-alpine AS production
 RUN apk add --no-cache dumb-init
 
 # Create app user
-RUN addgroup -g 1001 -S nodejs
-RUN adduser -S nextjs -u 1001
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
 
 # Set working directory
 WORKDIR /app
 
 # Copy built application
-COPY --from=builder --chown=nextjs:nodejs /app/dist ./dist
-COPY --from=builder --chown=nextjs:nodejs /app/server ./server
-COPY --from=builder /app/server/node_modules ./server/node_modules
-
-# Create logs directory
-RUN mkdir -p /app/server/logs && chown -R nextjs:nodejs /app/server/logs
+COPY --from=backend-builder --chown=nodejs:nodejs /app/server ./
 
 # Switch to non-root user
-USER nextjs
+USER nodejs
 
 # Expose port
 EXPOSE 5000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node server/healthcheck.js
+  CMD node healthcheck.js
 
-# Start the application
+# Start application
 ENTRYPOINT ["dumb-init", "--"]
-CMD ["node", "server/app.js"]
+CMD ["node", "app.js"]

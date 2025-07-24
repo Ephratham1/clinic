@@ -1,67 +1,119 @@
 const mongoose = require("mongoose")
 const logger = require("../utils/logger")
 
-const connectDB = async () => {
-  try {
-    // MongoDB Atlas connection string should be in environment variable
-    const mongoURI =
-      process.env.MONGODB_URI ||
-      "mongodb+srv://ephratham:ephratham@cluster0.x3irutl.mongodb.net/clinic?retryWrites=true&w=majority&appName=Cluster0"
+class Database {
+  constructor() {
+    this.connection = null
+    this.isConnected = false
+  }
 
-    const conn = await mongoose.connect(mongoURI, {
-      // Connection pooling options optimized for Atlas
-      maxPoolSize: 10, // Maintain up to 10 socket connections
-      serverSelectionTimeoutMS: 5000, // Keep trying to send operations for 5 seconds
-      socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
-      bufferMaxEntries: 0, // Disable mongoose buffering
-      bufferCommands: false, // Disable mongoose buffering
-      // Atlas specific options
-      retryWrites: true,
-      w: "majority",
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    })
+  async connect() {
+    try {
+      // MongoDB Atlas connection string from environment
+      const mongoUri = process.env.MONGODB_URI
 
-    logger.info(`MongoDB Atlas Connected: ${conn.connection.host}`)
-    logger.info(`Database: ${conn.connection.name}`)
+      if (!mongoUri) {
+        throw new Error("MONGODB_URI environment variable is not defined")
+      }
 
-    // Handle connection events
-    mongoose.connection.on("error", (err) => {
-      logger.error("MongoDB Atlas connection error:", err)
-    })
+      // Atlas-optimized connection options
+      const options = {
+        useNewUrlParser: true,
+        useUnifiedTopology: true,
+        maxPoolSize: 10, // Maintain up to 10 socket connections
+        serverSelectionTimeoutMS: 5000, // Keep trying to send operations for 5 seconds
+        socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
+        family: 4, // Use IPv4, skip trying IPv6
+        retryWrites: true,
+        w: "majority",
+        bufferCommands: false, // Disable mongoose buffering
+        bufferMaxEntries: 0, // Disable mongoose buffering
+        connectTimeoutMS: 10000, // Give up initial connection after 10 seconds
+        heartbeatFrequencyMS: 10000, // Send a ping every 10 seconds
+      }
 
-    mongoose.connection.on("disconnected", () => {
-      logger.warn("MongoDB Atlas disconnected")
-    })
+      // Connect to MongoDB Atlas
+      this.connection = await mongoose.connect(mongoUri, options)
+      this.isConnected = true
 
-    mongoose.connection.on("reconnected", () => {
-      logger.info("MongoDB Atlas reconnected")
-    })
+      logger.info("Successfully connected to MongoDB Atlas")
 
-    mongoose.connection.on("connecting", () => {
-      logger.info("Connecting to MongoDB Atlas...")
-    })
+      // Connection event handlers
+      mongoose.connection.on("connected", () => {
+        logger.info("Mongoose connected to MongoDB Atlas")
+        this.isConnected = true
+      })
 
-    mongoose.connection.on("connected", () => {
-      logger.info("Connected to MongoDB Atlas")
-    })
+      mongoose.connection.on("error", (err) => {
+        logger.error("Mongoose connection error:", err)
+        this.isConnected = false
+      })
 
-    // Graceful shutdown
-    process.on("SIGINT", async () => {
-      await mongoose.connection.close()
-      logger.info("MongoDB Atlas connection closed through app termination")
+      mongoose.connection.on("disconnected", () => {
+        logger.warn("Mongoose disconnected from MongoDB Atlas")
+        this.isConnected = false
+      })
+
+      // Handle application termination
+      process.on("SIGINT", this.gracefulShutdown.bind(this))
+      process.on("SIGTERM", this.gracefulShutdown.bind(this))
+
+      return this.connection
+    } catch (error) {
+      logger.error("Failed to connect to MongoDB Atlas:", error)
+      this.isConnected = false
+      throw error
+    }
+  }
+
+  async gracefulShutdown() {
+    try {
+      if (this.connection) {
+        await mongoose.connection.close()
+        logger.info("MongoDB Atlas connection closed through app termination")
+        this.isConnected = false
+      }
       process.exit(0)
-    })
+    } catch (error) {
+      logger.error("Error during graceful shutdown:", error)
+      process.exit(1)
+    }
+  }
 
-    process.on("SIGTERM", async () => {
-      await mongoose.connection.close()
-      logger.info("MongoDB Atlas connection closed through SIGTERM")
-      process.exit(0)
-    })
-  } catch (error) {
-    logger.error("MongoDB Atlas connection failed:", error)
-    process.exit(1)
+  getConnectionStatus() {
+    return {
+      isConnected: this.isConnected,
+      readyState: mongoose.connection.readyState,
+      host: mongoose.connection.host,
+      name: mongoose.connection.name,
+    }
+  }
+
+  async healthCheck() {
+    try {
+      if (!this.isConnected) {
+        return { status: "disconnected", message: "Not connected to database" }
+      }
+
+      // Ping the database
+      await mongoose.connection.db.admin().ping()
+
+      return {
+        status: "healthy",
+        message: "Database connection is healthy",
+        details: this.getConnectionStatus(),
+      }
+    } catch (error) {
+      logger.error("Database health check failed:", error)
+      return {
+        status: "unhealthy",
+        message: error.message,
+        details: this.getConnectionStatus(),
+      }
+    }
   }
 }
 
-module.exports = { connectDB }
+// Export singleton instance
+const database = new Database()
+module.exports = database
