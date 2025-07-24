@@ -13,7 +13,7 @@ services:
       - MONGODB_URI=${MONGODB_URI}
       - LOG_LEVEL=${LOG_LEVEL:-info}
     volumes:
-      - ./logs:/app/logs
+      - ./server/logs:/app/logs
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "node", "healthcheck.js"]
@@ -21,8 +21,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-    networks:
-      - clinic-network
 
   frontend:
     build:
@@ -32,20 +30,17 @@ services:
       - "80:80"
       - "443:443"
     environment:
-      - NEXT_PUBLIC_API_URL=http://backend:5000/api
+      - NEXT_PUBLIC_API_URL=http://backend:5000
     depends_on:
-      backend:
-        condition: service_healthy
+      - backend
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/"]
       interval: 30s
       timeout: 10s
       retries: 3
-    networks:
-      - clinic-network
+      start_period: 40s
 
-  # Nginx reverse proxy (optional)
   nginx:
     image: nginx:alpine
     ports:
@@ -56,11 +51,9 @@ services:
       - backend
       - frontend
     restart: unless-stopped
-    networks:
-      - clinic-network
 
 networks:
-  clinic-network:
+  default:
     driver: bridge
 
 volumes:

@@ -1,11 +1,8 @@
 const express = require("express")
-const router = express.Router()
 const mongoose = require("mongoose")
-const logger = require("../utils/logger")
+const router = express.Router()
 
-// @desc    Health check endpoint
-// @route   GET /api/health
-// @access  Public
+// Health check endpoint
 router.get("/", async (req, res) => {
   try {
     // Check database connection
@@ -16,16 +13,16 @@ router.get("/", async (req, res) => {
       status: "OK",
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
-      environment: process.env.NODE_ENV || "development",
-      version: process.env.npm_package_version || "1.0.0",
       database: {
         status: dbStatus,
         name: mongoose.connection.name || "unknown",
       },
       memory: {
-        used: Math.round((process.memoryUsage().heapUsed / 1024 / 1024) * 100) / 100,
-        total: Math.round((process.memoryUsage().heapTotal / 1024 / 1024) * 100) / 100,
+        used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + " MB",
+        total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024) + " MB",
       },
+      environment: process.env.NODE_ENV || "development",
+      version: "1.0.0",
     }
 
     // If database is not connected, return 503
@@ -37,63 +34,46 @@ router.get("/", async (req, res) => {
       })
     }
 
-    logger.info("Health check performed successfully")
-    res.json(healthCheck)
+    res.status(200).json(healthCheck)
   } catch (error) {
-    logger.error("Health check failed:", error)
     res.status(503).json({
       status: "ERROR",
       timestamp: new Date().toISOString(),
-      message: "Health check failed",
-      error: error.message,
+      message: error.message,
     })
   }
 })
 
-// @desc    Detailed health check
-// @route   GET /api/health/detailed
-// @access  Public
+// Detailed health check
 router.get("/detailed", async (req, res) => {
   try {
-    const Appointment = require("../models/Appointment")
-
-    // Test database operations
-    const appointmentCount = await Appointment.countDocuments()
-    const recentAppointments = await Appointment.find().sort({ createdAt: -1 }).limit(1)
-
-    const detailedHealth = {
+    const detailed = {
       status: "OK",
       timestamp: new Date().toISOString(),
       services: {
         database: {
-          status: "OK",
+          status: mongoose.connection.readyState === 1 ? "healthy" : "unhealthy",
           responseTime: Date.now(),
-          collections: {
-            appointments: {
-              count: appointmentCount,
-              lastCreated: recentAppointments[0]?.createdAt || null,
-            },
-          },
         },
         api: {
-          status: "OK",
+          status: "healthy",
           uptime: process.uptime(),
-          memory: process.memoryUsage(),
-          cpu: process.cpuUsage(),
         },
+      },
+      system: {
+        platform: process.platform,
+        nodeVersion: process.version,
+        memory: process.memoryUsage(),
+        cpu: process.cpuUsage(),
       },
     }
 
-    detailedHealth.services.database.responseTime = Date.now() - detailedHealth.services.database.responseTime
-
-    res.json(detailedHealth)
+    res.status(200).json(detailed)
   } catch (error) {
-    logger.error("Detailed health check failed:", error)
     res.status(503).json({
       status: "ERROR",
       timestamp: new Date().toISOString(),
-      message: "Detailed health check failed",
-      error: error.message,
+      message: error.message,
     })
   }
 })
